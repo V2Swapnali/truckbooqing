@@ -4,6 +4,7 @@ const { MoleculerClientError } = require("moleculer").Errors;
 const { hashIterations, hashLength } = require('../helpers/constants')
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
+const axios = require('axios');
 
 const DbService = require("../mixins/db.mixin");
 const CacheCleanerMixin = require("../mixins/cache.cleaner.mixin");
@@ -32,7 +33,7 @@ module.exports = {
 			username: { type: "string", min: 2, pattern: /^[a-zA-Z0-9]+$/ },
 			password: { type: "string", min: 6 },
 			email: { type: "email" },
-			bio: { type: "string", optional: true },
+			mobileNo: { type: "number" },
 			image: { type: "string", optional: true },
 		}
 	},
@@ -77,14 +78,22 @@ module.exports = {
 					.then(() => {
 						entity.salt = crypto.randomBytes(16).toString('hex');
 						entity.password = crypto.pbkdf2Sync(entity.password, entity.salt, hashIterations, hashLength, `sha512`).toString(`hex`);
-						entity.bio = entity.bio || "";
 						entity.image = entity.image || null;
 						entity.createdAt = new Date();
-
-						return this.adapter.insert(entity)
-							.then(doc => this.transformDocuments(ctx, {}, doc))
-							.then(user => this.transformEntity(user, true, ctx.meta.token))
-							.then(json => this.entityChanged("created", json, ctx).then(() => json));
+						let smsAPI = 'https://2factor.in/API/V1/' + process.env.API_KEY_SMS + '/SMS/+91' + entity.mobileNo + '/AUTOGEN'
+						axios.get(smsAPI)
+							.then(res => {
+								if (res.Status == 'Error')
+									return Promise.reject(new MoleculerClientError("Error in SMS!", 422, "", [{ field: "SMS", message: "not sent" }]))
+								entity.smsSessionDetails = res.Details
+								return this.adapter.insert(entity)
+									.then(doc => this.transformDocuments(ctx, {}, doc))
+									.then(user => this.transformEntity(user, true, ctx.meta.token))
+									.then(json => this.entityChanged("created", json, ctx).then(() => json));
+							})
+							.catch(function (error) {
+								console.log(error);
+							})
 					});
 			}
 		},
