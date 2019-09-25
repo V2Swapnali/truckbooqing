@@ -1,8 +1,5 @@
 # TBooq Application
 
-
-[This repo is functionality complete — PRs and issues welcome!
-
 ## Getting started
 
 ### To get the Node server running locally:
@@ -42,6 +39,7 @@ You can run multiple instances of services. Moleculer uses TCP transporter to co
 - `public/` - This folder contains the front-end static files.
 - `models/` - This folder contains all the schemas
 - `routes/` - This folder contains the aliases for the routes
+- `helpers/` - This folder contains the helpers file for micro services
 
 ## Test
 
