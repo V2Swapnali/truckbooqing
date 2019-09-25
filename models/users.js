@@ -30,7 +30,8 @@ var UserSchema = new mongoose.Schema({
     isLoggedIn: { type: Boolean, default: false },
     loggedInTime: { type: Date },
     lastActivityTime: { type: Date },
-    licenseNumber:{type:String}
+    licenseNumber:{type:String},
+    salt : {type: String} 
 },{
     timestamps: true,
     toObject: {
