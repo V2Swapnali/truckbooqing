@@ -80,20 +80,17 @@ module.exports = {
 						entity.password = crypto.pbkdf2Sync(entity.password, entity.salt, hashIterations, hashLength, `sha512`).toString(`hex`);
 						entity.image = entity.image || null;
 						entity.createdAt = new Date();
-						let smsAPI = 'https://2factor.in/API/V1/' + process.env.API_KEY_SMS + '/SMS/+91' + entity.mobileNo + '/AUTOGEN'
-						axios.get(smsAPI)
+						return this.getOTP(entity.mobileNo)
 							.then(res => {
-								if (res.Status == 'Error')
-									return Promise.reject(new MoleculerClientError("Error in SMS!", 422, "", [{ field: "SMS", message: "not sent" }]))
-								entity.smsSessionDetails = res.Details
+								console.log('res!!!!', res.data)
+								entity.smsSessionDetails = res.data.Details;
 								return this.adapter.insert(entity)
 									.then(doc => this.transformDocuments(ctx, {}, doc))
 									.then(user => this.transformEntity(user, true, ctx.meta.token))
 									.then(json => this.entityChanged("created", json, ctx).then(() => json));
 							})
-							.catch(function (error) {
-								console.log(error);
-							})
+
+
 					});
 			}
 		},
@@ -315,6 +312,19 @@ module.exports = {
 		async getJWTSecret(ctx) {
 			let res = await ctx.call("adminsettings.jwtsecret");
 			return res.JWT_SECRET;
+		},
+
+		getOTP(mobileNo) {
+			let smsAPI = 'https://2factor.in/API/V1/' + process.env.API_KEY_SMS + '/SMS/+91' + mobileNo + '/AUTOGEN'
+			return new Promise((resolve, reject) => {
+				axios.get(smsAPI)
+					.then(res => {
+						resolve(res)
+					})
+					.catch(function (error) {
+						reject(error);
+					})
+			})
 		},
 
 		/**
