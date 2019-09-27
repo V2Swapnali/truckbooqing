@@ -57,7 +57,7 @@ module.exports = {
 				const errObj = _.pick(err, ["name", "message", "code", "type", "data"]);
 				res.end(JSON.stringify(errObj, null, 2));
 			}
-			this.logResponse(req, res, err? err.ctx : null);
+			this.logResponse(req, res, err ? err.ctx : null);
 		}
 
 	},

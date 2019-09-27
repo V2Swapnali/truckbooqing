@@ -5,9 +5,21 @@ const { hashIterations, hashLength } = require('../helpers/constants')
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const axios = require('axios');
+const multer = require('multer');
 
 const DbService = require("../mixins/db.mixin");
 const CacheCleanerMixin = require("../mixins/cache.cleaner.mixin");
+var storage = multer.diskStorage({
+	destination: function (req, file, callback) {
+		callback(null, './uploads');
+	},
+	filename: function (req, file, callback) {
+		callback(null, file.fieldname + '-' + Date.now());
+	}
+});
+
+var formidable = require('formidable');
+var fs = require('fs');
 
 module.exports = {
 	name: "users",
@@ -22,9 +34,6 @@ module.exports = {
 	 * Default settings
 	 */
 	settings: {
-		/** Secret for JWT */
-		JWT_SECRET: process.env.JWT_SECRET,
-
 		/** Public fields */
 		fields: ["_id", "username", "email", "bio", "image"],
 
@@ -35,6 +44,7 @@ module.exports = {
 			email: { type: "email" },
 			mobileNo: { type: "number" },
 			image: { type: "string", optional: true },
+			userType: { type: "string" },
 		}
 	},
 
@@ -80,17 +90,17 @@ module.exports = {
 						entity.password = crypto.pbkdf2Sync(entity.password, entity.salt, hashIterations, hashLength, `sha512`).toString(`hex`);
 						entity.image = entity.image || null;
 						entity.createdAt = new Date();
-						return this.getOTP(entity.mobileNo)
-							.then(res => {
-								console.log('res!!!!', res.data)
-								entity.smsSessionDetails = res.data.Details;
-								return this.adapter.insert(entity)
-									.then(doc => this.transformDocuments(ctx, {}, doc))
-									.then(user => this.transformEntity(user, true, ctx.meta.token))
-									.then(json => this.entityChanged("created", json, ctx).then(() => json));
-							})
-
-
+						// return this.getOTP(entity.mobileNo)
+						// 	.then(res => {
+						// 		entity.smsSessionDetails = res.data.Details;
+						// var upload = multer({ storage: storage }).array('userPhoto', 2);
+						return this.adapter.insert(entity)
+							.then(doc => this.transformDocuments(ctx, {}, doc))
+							.then(user => this.transformEntity(user, true, ctx.meta.token, ctx))
+							.then(json => this.entityChanged("created", json, ctx).then(() => json));
+						// }).catch((err) => {
+						// 	return Promise.reject(new MoleculerClientError("SMS Sending Failed!", 422, "", [{ field: "mobileNo", message: "SMS Failed" }]));
+						// }) 
 					});
 			}
 		},
@@ -107,16 +117,17 @@ module.exports = {
 			params: {
 				user: {
 					type: "object", props: {
-						email: { type: "email" },
+						email: { type: "email", optional: true },
+						username: { type: "string" },
 						password: { type: "string", min: 1 }
 					}
 				}
 			},
 			handler(ctx) {
-				const { email, password } = ctx.params.user;
+				const { email, password, username } = ctx.params.user;
 
 				return this.Promise.resolve()
-					.then(() => this.adapter.findOne({ email }))
+					.then(() => this.adapter.findOne({ $or: [{ 'email': email }, { 'username': username }] }))
 					.then(user => {
 						if (!user)
 							return this.Promise.reject(new MoleculerClientError("Email or password is invalid!", 422, "", [{ field: "email", message: "is not found" }]));
@@ -127,7 +138,10 @@ module.exports = {
 							return this.Promise.reject(new MoleculerClientError("Wrong password!", 422, "", [{ field: "Password", message: "is incorrect" }]));
 						}
 					})
-					.then(user => this.transformEntity(user, true, ctx.meta.token, ctx));
+					.then(user => this.transformEntity(user, true, ctx.meta.token, ctx))
+					.catch((err) => {
+						return this.Promise.reject(new MoleculerClientError("Something went wrong. Please try again!", 422, "", [{ field: "Password", message: "is incorrect" }]));
+					});
 			}
 		},
 
@@ -149,12 +163,13 @@ module.exports = {
 			},
 			handler(ctx) {
 				return new this.Promise((resolve, reject) => {
-					jwt.verify(ctx.params.token, this.settings.JWT_SECRET, (err, decoded) => {
-						if (err)
-							return reject(err);
-
-						resolve(decoded);
-					});
+					this.getJWTSecret(ctx).then((jwtsecret) => {
+						jwt.verify(ctx.params.token, jwtsecret, (err, decoded) => {
+							if (err)
+								return reject(err);
+							resolve(decoded);
+						});
+					})
 
 				})
 					.then(decoded => {
@@ -184,6 +199,54 @@ module.exports = {
 							return this.Promise.reject(new MoleculerClientError("User not found!", 400));
 
 						return this.transformDocuments(ctx, {}, user);
+					})
+					.then(user => this.transformEntity(user, true, ctx.meta.token));
+			}
+		},
+
+		/**
+		 * Upload file.
+		 * Auth is required!
+		 *
+		 * @actions
+		 *
+		 * @returns {Object} User entity
+		 */
+		uploadFile: {
+			auth: "required",
+			cache: {
+				keys: ["#userID"]
+			},
+			params: {
+				user: { type: "object" }
+			},
+			handler(ctx) {
+				console.log('Inside upload call'); 
+				var upload = multer({ storage: storage }).array('userPhoto', 2);
+				return this.getById(ctx.meta.user._id)
+					.then(user => {
+						if (!user)
+							return this.Promise.reject(new MoleculerClientError("User not found!", 400));
+						// upload().then(res => {
+						// 	//console.log(req.body);
+						// 	//console.log(req.files);
+						// 	// if (err) {
+						// 	// 	console.log(err)
+						// 	// 	return this.Promise.reject(new MoleculerClientError("User not found!", 400));
+						// 	// }
+						// 	// return this.transformEntity(user, true, ctx.meta.token)
+						// 	return this.transformDocuments(ctx, {}, user);
+						// });
+						var form = new formidable.IncomingForm();
+						form.parse(params, function (err, fields, files) {
+							var oldpath = files.filetoupload.path;
+							var newpath = 'D:/Tausif/Projects/Code/MEAN/moleculer/tqbook/' + files.filetoupload.name;
+							fs.rename(oldpath, newpath, function (err) {
+							  if (err) throw err;
+							  user.newpath = newpath;
+							  return this.transformDocuments(ctx, {}, user);
+							});
+					   });
 					})
 					.then(user => this.transformEntity(user, true, ctx.meta.token));
 			}
@@ -283,39 +346,38 @@ module.exports = {
 		 * @param {Object} user
 		 */
 		generateJWT(user, ctx) {
-			const today = new Date();
-			const exp = new Date(today);
-			exp.setDate(today.getDate() + 60);
-			return jwt.sign({
-				id: user._id,
-				username: user.username,
-				exp: Math.floor(exp.getTime() / 1000)
-			}, this.settings.JWT_SECRET)
-			// new Promise((resolve, reject) => {
-			// 	ctx.call("adminsettings.jwtsecret").then(res => {
-			// 		const today = new Date();
-			// 		const exp = new Date(today);
-			// 		exp.setDate(today.getDate() + 60);
-			// 		resolve(jwt.sign({
-			// 			id: user._id,
-			// 			username: user.username,
-			// 			exp: Math.floor(exp.getTime() / 1000)
-			// 		}, res.JWT_SECRET))
-			// 	})
-			// })
+			return new Promise((resolve, reject) => {
+				this.getJWTSecret(ctx).then(jwtsecret => {
+					const today = new Date();
+					const exp = new Date(today);
+					exp.setDate(today.getDate() + 60);
+					resolve(jwt.sign({
+						id: user._id,
+						username: user.username,
+						exp: Math.floor(exp.getTime() / 1000)
+					}, jwtsecret))
+				}).catch((err) => {
+					reject(new MoleculerClientError("Error in registration. Please try again!", 404));
+				})
+			})
 		},
 
 		/**
 		 * Retrieve the JWT Secret key from DB. Generate JWT token if neccessary.
 		 *
 		 */
-		async getJWTSecret(ctx) {
-			let res = await ctx.call("adminsettings.jwtsecret");
-			return res.JWT_SECRET;
+		getJWTSecret(ctx) {
+			return new Promise((resolve, reject) => {
+				ctx.call("adminsettings.jwtsecret").then(res => {
+					resolve(res.JWT_SECRET)
+				}).catch((err) => {
+					reject(new MoleculerClientError("JWT not found!", 404));
+				})
+			})
 		},
 
 		getOTP(mobileNo) {
-			let smsAPI = 'https://2factor.in/API/V1/' + process.env.API_KEY_SMS + '/SMS/+91' + mobileNo + '/AUTOGEN'
+			let smsAPI = 'https://2factor.in/API/V1/' + process.env.API_KEY_SMS + '/SMS/+91' + mobileNo + '/AUTOGEN/REGISTRATION'
 			return new Promise((resolve, reject) => {
 				axios.get(smsAPI)
 					.then(res => {
@@ -336,10 +398,17 @@ module.exports = {
 		transformEntity(user, withToken, token, ctx) {
 			if (user) {
 				//user.image = user.image || "https://www.gravatar.com/avatar/" + crypto.createHash("md5").update(user.email).digest("hex") + "?d=robohash";
-				if (withToken)
-					user.token = token || this.generateJWT(user, ctx);
+				if (withToken && token) {
+					user.token = token
+					return { user };
+				} else {
+					return this.generateJWT(user, ctx).then((res) => {
+						user.token = res
+						return { user };
+					});
+				}
 			}
-			return { user };
+
 		},
 
 		/**

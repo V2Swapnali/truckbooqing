@@ -34,7 +34,7 @@ module.exports = {
 		 */
 		jwtsecret: {
 			handler() { 
-				return {JWT_SECRET: 'jwt-tbooq-secret'};
+				return this.findJWTSecret();
 			}
 		},
 	},
@@ -47,7 +47,7 @@ module.exports = {
 		 * Find the JWT_SECRET from Admin Settings
 		 */
 		findJWTSecret() {
-			return this.adapter.findOne();
+			return this.adapter.findOne({});
 		},
 	}
 };

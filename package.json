@@ -29,6 +29,7 @@
     "axios": "^0.19.0",
     "bcrypt": "^3.0.2",
     "dotenv": "^8.1.0",
+    "formidable": "^1.2.1",
     "ioredis": "3.2.2",
     "jsonwebtoken": "8.3.0",
     "lodash": "4.17.10",
@@ -39,6 +40,7 @@
     "moleculer-db-adapter-mongoose": "^0.8.2",
     "moleculer-web": "0.8.0",
     "mongoose": "^5.7.1",
+    "multer": "^1.4.2",
     "slug": "0.9.1"
   },
   "engines": {
