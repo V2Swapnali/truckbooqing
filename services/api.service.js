@@ -10,7 +10,7 @@ module.exports = {
 	mixins: [ApiGateway],
 
 	settings: {
-		port: process.env.PORT || 3000,
+		port: process.env.PORT,
 
 		routes: [{
 			path: "/api",
@@ -33,7 +33,19 @@ module.exports = {
 				urlencoded: {
 					extended: false
 				}
-			}
+			},
+
+			busboyConfig: {
+				limits: {
+					files: 1
+				}
+			},
+
+			callOptions: {
+				meta: {
+					a: 5
+				}
+			},
 		}],
 
 		assets: {
@@ -88,7 +100,7 @@ module.exports = {
 								if (user) {
 									this.logger.info("Authenticated via JWT: ", user.username);
 									// Reduce user fields (it will be transferred to other nodes)
-									ctx.meta.user = _.pick(user, ["_id", "username", "email", "image"]);
+									ctx.meta.user = _.pick(user, ["_id", "username", "email"]);
 									ctx.meta.token = token;
 									ctx.meta.userID = user._id;
 								}

@@ -5,21 +5,9 @@ const { hashIterations, hashLength } = require('../helpers/constants')
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const axios = require('axios');
-const multer = require('multer');
 
 const DbService = require("../mixins/db.mixin");
 const CacheCleanerMixin = require("../mixins/cache.cleaner.mixin");
-var storage = multer.diskStorage({
-	destination: function (req, file, callback) {
-		callback(null, './uploads');
-	},
-	filename: function (req, file, callback) {
-		callback(null, file.fieldname + '-' + Date.now());
-	}
-});
-
-var formidable = require('formidable');
-var fs = require('fs');
 
 module.exports = {
 	name: "users",
@@ -217,38 +205,15 @@ module.exports = {
 			cache: {
 				keys: ["#userID"]
 			},
-			params: {
-				user: { type: "object" }
-			},
 			handler(ctx) {
-				console.log('Inside upload call'); 
-				var upload = multer({ storage: storage }).array('userPhoto', 2);
-				return this.getById(ctx.meta.user._id)
-					.then(user => {
-						if (!user)
+					return ctx.call("fileuploaders.uploadFile").then(fileUploaded => {
+						if (!fileUploaded)
 							return this.Promise.reject(new MoleculerClientError("User not found!", 400));
-						// upload().then(res => {
-						// 	//console.log(req.body);
-						// 	//console.log(req.files);
-						// 	// if (err) {
-						// 	// 	console.log(err)
-						// 	// 	return this.Promise.reject(new MoleculerClientError("User not found!", 400));
-						// 	// }
-						// 	// return this.transformEntity(user, true, ctx.meta.token)
-						// 	return this.transformDocuments(ctx, {}, user);
-						// });
-						var form = new formidable.IncomingForm();
-						form.parse(params, function (err, fields, files) {
-							var oldpath = files.filetoupload.path;
-							var newpath = 'D:/Tausif/Projects/Code/MEAN/moleculer/tqbook/' + files.filetoupload.name;
-							fs.rename(oldpath, newpath, function (err) {
-							  if (err) throw err;
-							  user.newpath = newpath;
-							  return this.transformDocuments(ctx, {}, user);
-							});
-					   });
+						return this.transformDocuments(ctx, {}, fileUploaded);
 					})
-					.then(user => this.transformEntity(user, true, ctx.meta.token));
+					.catch((err) => {
+						return this.Promise.reject(new MoleculerClientError("Something went wrong. Please try again!", 422, "", [{ field: "Password", message: "is incorrect" }]));
+					});
 			}
 		},
 
